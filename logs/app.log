@@ -1,3 +1,1 @@
-2024-01-19 13:56:01 - src.conversation_manager - INFO - create WasmConversation session data for 039bfd6f-6198-431b-98dd-73f2a770d1c5 and initialize
-2024-01-19 13:56:01 - src.conversation_manager - INFO - get conversation for session id 039bfd6f-6198-431b-98dd-73f2a770d1c5, type of conversation is SessionData True
-2024-01-19 13:56:01 - src.conversation_manager - ERROR - DocumentEmbedder.__init__() got an unexpected keyword argument 'is_azure'
+
