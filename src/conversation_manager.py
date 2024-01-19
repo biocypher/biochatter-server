@@ -143,9 +143,7 @@ def initialize_conversation(sessionId: str, modelConfig: dict):
                 chatter=chatter,
             )
         elif (
-            OPENAI_API_TYPE in os.environ
-            and os.environ[OPENAI_API_TYPE] == "wasm"
-            or modelConfig["model"] == "mistral-wasm"
+             modelConfig["model"] == "mistral-wasm"
         ):
             logger.info(
                 f"create WasmConversation session data for {sessionId} and initialize"
