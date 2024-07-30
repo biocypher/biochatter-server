@@ -3,8 +3,10 @@ from src.conversation_manager import (
     get_conversation, 
     has_conversation,
     initialize_conversation, 
-    parse_api_key,
-    remove_conversation
+    remove_conversation,
+)
+from src.utils import (
+    parse_api_key
 )
 
 def test_parse_api_key():

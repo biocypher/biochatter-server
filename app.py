@@ -1,10 +1,10 @@
 import json
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Annotated
+import asyncio
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, Request
 from starlette.middleware.cors import CORSMiddleware
-from flask import Flask, request
 from dotenv import load_dotenv
 import atexit
 import logging
@@ -21,6 +21,14 @@ from src.constants import (
 )
 from src.conversation_manager import chat, has_conversation, initialize_conversation
 
+from src.datatypes import (
+    ChatCompletionsPostModel, 
+    KgConnectionStatusPostModel, 
+    RagAllDocumentsPostModel, 
+    RagConnectionStatusPostModel, 
+    RagDocumentDeleteModel, 
+    RagNewDocumentPostModel,
+)
 from src.document_embedder import (
     get_all_documents,
     get_connection_status as get_vectorstore_connection_status,
@@ -99,57 +107,35 @@ def process_connection_args(rag: str, connection_args: dict) -> dict:
             )
     return connection_args
 
-
-def extract_and_process_params_from_json_body(
-    json: Optional[dict], name: str, defaultVal: Optional[Any]
-) -> Optional[Any]:
-    if not json:
-        return defaultVal
-    val = json.get(name, defaultVal)
-    return val
-
-
 @app.post("/v1/chat/completions", description="chat completions")
-def handle():
-    auth = get_auth(request)
-    jsonBody = request.json
-    sessionId = extract_and_process_params_from_json_body(
-        jsonBody, "session_id", defaultVal=""
-    )
-    messages = extract_and_process_params_from_json_body(
-        jsonBody, "messages", defaultVal=[]
-    )
-    model = extract_and_process_params_from_json_body(
-        jsonBody, "model", defaultVal="gpt-3.5-turbo"
-    )
-    temperature = extract_and_process_params_from_json_body(
-        jsonBody, "temperature", defaultVal=0.7
-    )
-    presence_penalty = extract_and_process_params_from_json_body(
-        jsonBody, "presence_penalty", defaultVal=0
-    )
-    frequency_penalty = extract_and_process_params_from_json_body(
-        jsonBody, "frequency_penalty", defaultVal=0
-    )
-    top_p = extract_and_process_params_from_json_body(jsonBody, "top_p", defaultVal=1)
-    ragConfig = extract_and_process_params_from_json_body(
-        jsonBody, "ragConfig", defaultVal=DEFAULT_RAGCONFIG
-    )
+def handle(
+    authorization: Annotated[str | None, Header()],
+    item: ChatCompletionsPostModel,
+    # request: Request, # ChatCompletionsPostModel,
+):
+    auth = get_auth(authorization)
+    
+    sessionId = item.session_id
+    messages = [vars(msg) for msg in item.messages]
+    model = item.model
+    temperature = item.temperature
+    presence_penalty = item.presence_penalty
+    frequency_penalty = item.frequency_penalty
+    top_p = item.top_p
+    ragConfig = item.ragConfig
+    ragConfig = vars(ragConfig)
+    ragConfig[ARGS_CONNECTION_ARGS] = vars(ragConfig[ARGS_CONNECTION_ARGS])
     ragConfig[ARGS_CONNECTION_ARGS] = process_connection_args(
         RAG_VECTORSTORE, ragConfig[ARGS_CONNECTION_ARGS]
     )
-    useRAG = extract_and_process_params_from_json_body(
-        jsonBody, "useRAG", defaultVal=False
-    )
-    kgConfig = extract_and_process_params_from_json_body(
-        jsonBody, "kgConfig", defaultVal={}
-    )
+    useRAG = item.useRAG
+    kgConfig = item.kgConfig
+    kgConfig = vars(kgConfig)
+    kgConfig[ARGS_CONNECTION_ARGS] = vars(kgConfig[ARGS_CONNECTION_ARGS])
     kgConfig[ARGS_CONNECTION_ARGS] = process_connection_args(
         RAG_KG, kgConfig[ARGS_CONNECTION_ARGS]
     )
-    useKG = extract_and_process_params_from_json_body(
-        jsonBody, "useKG", defaultVal=False
-    )
+    useKG = item.useKG
 
     if not has_conversation(sessionId):
         initialize_conversation(
@@ -192,19 +178,19 @@ def handle():
 
 
 @app.post("/v1/rag/newdocument", description="creates new document")
-def newDocument():
-    jsonBody = request.json
-    tmpFile = extract_and_process_params_from_json_body(jsonBody, "tmpFile", "")
-    filename = extract_and_process_params_from_json_body(jsonBody, "filename", "")
-    ragConfig = extract_and_process_params_from_json_body(
-        jsonBody, "ragConfig", DEFAULT_RAGCONFIG
-    )
+def newDocument(
+    authorization: Annotated[str | None, Header()],
+    item: RagNewDocumentPostModel
+):
+    tmpFile = item.tmpFile
+    filename = item.filename
+    ragConfig = item.ragConfig
     if type(ragConfig) is str:
         ragConfig = json.loads(ragConfig)
     ragConfig[ARGS_CONNECTION_ARGS] = process_connection_args(
         RAG_VECTORSTORE, ragConfig[ARGS_CONNECTION_ARGS]
     )
-    auth = get_auth(request)
+    auth = get_auth(authorization)
     # TODO: consider to be compatible with XinferenceDocumentEmbedder
     try:
         doc_id = new_embedder_document(
@@ -224,19 +210,20 @@ def newDocument():
 
 
 @app.post("/v1/rag/alldocuments", description="retrieves all documents")
-def getAllDocuments():
+def getAllDocuments(
+    authorization: Annotated[str | None, Header()],
+    item: RagAllDocumentsPostModel,
+):
     def post_process(docs: List[Any]):
         for doc in docs:
             doc["id"] = str(doc["id"])
         return docs
 
-    auth = get_auth(request)
-    jsonBody = request.json
-    connection_args = extract_and_process_params_from_json_body(
-        jsonBody, ARGS_CONNECTION_ARGS, None
-    )
+    auth = get_auth(authorization)
+    connection_args = item.connectionArgs
+    connection_args = vars(connection_args)
     connection_args = process_connection_args(RAG_VECTORSTORE, connection_args)
-    doc_ids = extract_and_process_params_from_json_body(jsonBody, "docIds", None)
+    doc_ids = item.docIds
     try:
         docs = get_all_documents(auth, connection_args, doc_ids=doc_ids)
         docs = post_process(docs)
@@ -254,15 +241,16 @@ def getAllDocuments():
 
 
 @app.delete("/v1/rag/document", description="removes a document")
-def removeDocument():
-    jsonBody = request.json
-    auth = get_auth(request)
-    docId = extract_and_process_params_from_json_body(jsonBody, "docId", "")
-    connection_args = extract_and_process_params_from_json_body(
-        jsonBody, ARGS_CONNECTION_ARGS, None
-    )
+def removeDocument(
+    authorization: Annotated[str | None, Header()],
+    item: RagDocumentDeleteModel,
+):
+    auth = get_auth(authorization)
+    docId = item.docId
+    connection_args = item.connectionArgs
+    connection_args = vars(connection_args)
     connection_args = process_connection_args(RAG_VECTORSTORE, connection_args)
-    doc_ids = extract_and_process_params_from_json_body(jsonBody, "docIds", None)
+    doc_ids = item.docIds
     if len(docId) == 0:
         return {"error": "Failed to find document"}
     try:
@@ -283,13 +271,14 @@ def removeDocument():
 
 
 @app.post("/v1/rag/connectionstatus", description="returns connection status")
-def getConnectionStatus():
+def getConnectionStatus(
+    authorization: Annotated[str | None, Header()],
+    item: RagConnectionStatusPostModel,
+):
     try:
-        auth = get_auth(request)
-        jsonBody = request.json
-        connection_args = extract_and_process_params_from_json_body(
-            jsonBody, ARGS_CONNECTION_ARGS, None
-        )
+        auth = get_auth(authorization)
+        connection_args = item.connectionArgs
+        connection_args = vars(connection_args)
         connection_args = process_connection_args(RAG_VECTORSTORE, connection_args)
         connected = get_vectorstore_connection_status(connection_args, auth)
         return {
@@ -305,12 +294,12 @@ def getConnectionStatus():
 @app.post(
     "/v1/kg/connectionstatus", description="returns knowledge graph connection status"
 )
-def getKGConnectionStatus():
+def getKGConnectionStatus(
+    item: KgConnectionStatusPostModel,
+):
     try:
-        jsonBody = request.json
-        connection_args = extract_and_process_params_from_json_body(
-            jsonBody, ARGS_CONNECTION_ARGS, None
-        )
+        connection_args = item.connectionArgs
+        connection_args = vars(connection_args)
         connection_args = process_connection_args(RAG_KG, connection_args)
         connected = get_kg_connection_status(connection_args)
         return {

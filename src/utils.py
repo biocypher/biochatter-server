@@ -23,13 +23,13 @@ def get_rag_agent_prompts() -> List[str]:
         "you: {statements}",
     ]
 
-def get_auth(request):
+def get_auth(authorization: str):
     # If OPENAI_API_KEY is provided by server, we will use it
     if OPENAI_API_KEY in os.environ and os.environ[OPENAI_API_KEY]:
         return os.environ[OPENAI_API_KEY]
     
     # Otherwise, we will parse it from request
-    auth = request.headers.get("Authorization")
+    auth = authorization
     auth = auth if auth is not None and len(auth) > 0 else ""
     return parse_api_key(auth)
 

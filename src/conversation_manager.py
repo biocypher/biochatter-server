@@ -63,7 +63,7 @@ class SessionData:
 
     def chat(
         self,
-        messages: List[str],
+        messages: List[Dict[str, str]],
         authKey: str,
         ragConfig: dict,
         useRAG: bool = False,
