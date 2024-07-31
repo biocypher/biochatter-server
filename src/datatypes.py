@@ -15,10 +15,12 @@ class RagConfig(BaseModel):
     resultNum: int
     connectionArgs: ConnectionArgs
     docIdsWorkspace: Optional[List[str]]=None
+    description: Optional[str]=None
 
 class KGConfig(BaseModel):
     resultNum: int
     connectionArgs: ConnectionArgs
+    description: Optional[str]=None
 
 class RagNewDocumentPostModel(BaseModel):
     tmpFile: str
