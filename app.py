@@ -123,19 +123,25 @@ def handle(
     frequency_penalty = item.frequency_penalty
     top_p = item.top_p
     ragConfig = item.ragConfig
-    ragConfig = vars(ragConfig)
-    ragConfig[ARGS_CONNECTION_ARGS] = vars(ragConfig[ARGS_CONNECTION_ARGS])
-    ragConfig[ARGS_CONNECTION_ARGS] = process_connection_args(
-        RAG_VECTORSTORE, ragConfig[ARGS_CONNECTION_ARGS]
-    )
+    if ragConfig is not None:
+        ragConfig = vars(ragConfig)
+        ragConfig[ARGS_CONNECTION_ARGS] = vars(ragConfig[ARGS_CONNECTION_ARGS])
+        ragConfig[ARGS_CONNECTION_ARGS] = process_connection_args(
+            RAG_VECTORSTORE, ragConfig[ARGS_CONNECTION_ARGS]
+        )
     useRAG = item.useRAG
     kgConfig = item.kgConfig
-    kgConfig = vars(kgConfig)
-    kgConfig[ARGS_CONNECTION_ARGS] = vars(kgConfig[ARGS_CONNECTION_ARGS])
-    kgConfig[ARGS_CONNECTION_ARGS] = process_connection_args(
-        RAG_KG, kgConfig[ARGS_CONNECTION_ARGS]
-    )
+    if kgConfig is not None:
+        kgConfig = vars(kgConfig)
+        kgConfig[ARGS_CONNECTION_ARGS] = vars(kgConfig[ARGS_CONNECTION_ARGS])
+        kgConfig[ARGS_CONNECTION_ARGS] = process_connection_args(
+            RAG_KG, kgConfig[ARGS_CONNECTION_ARGS]
+        )
     useKG = item.useKG
+    oncokbConfig = item.oncokbConfig
+    if oncokbConfig is not None:
+        oncokbConfig = vars(oncokbConfig)
+    useAutoAgent = item.useAutoAgent
 
     if not has_conversation(sessionId):
         initialize_conversation(
@@ -151,7 +157,15 @@ def handle(
         )
     try:
         (msg, usage, contexts) = chat(
-            sessionId, messages, auth, ragConfig, useRAG, kgConfig, useKG
+            sessionId=sessionId,
+            messages=messages, 
+            authKey=auth, 
+            ragConfig=ragConfig, 
+            useRAG=useRAG, 
+            kgConfig=kgConfig, 
+            useKG=useKG, 
+            oncokbConfig=oncokbConfig, 
+            useAutoAgent=useAutoAgent, 
         )
         return {
             "choices": [

@@ -46,6 +46,10 @@ class Message(BaseModel):
     role: str
     content: str
 
+class OncoKBConfig(BaseModel):
+    useOncoKB: bool
+    description: Optional[str] = None
+
 class ChatCompletionsPostModel(BaseModel):
     session_id: str
     messages: List[Message]
@@ -55,10 +59,12 @@ class ChatCompletionsPostModel(BaseModel):
     frequency_penalty: int
     top_p: int
     useRAG: bool
-    ragConfig: RagConfig
+    ragConfig: Optional[RagConfig]=None
     useKG: bool
-    kgConfig: KGConfig
+    kgConfig: Optional[KGConfig]=None
     stream: Optional[bool]=None
+    oncokbConfig: Optional[OncoKBConfig]=None
+    useAutoAgent: Optional[bool]=None
     
     
 

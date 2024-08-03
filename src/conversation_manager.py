@@ -65,10 +65,12 @@ class SessionData:
         self,
         messages: List[Dict[str, str]],
         authKey: str,
-        ragConfig: dict,
         useRAG: bool = False,
-        kgConfig: dict = None,
         useKG: bool = False,
+        useAutoAgent = False,
+        ragConfig: Optional[Dict] = None,
+        kgConfig: Optional[Dict] = None,
+        oncokbConfig: Optional[Dict] = None,
     ):
         if self.chatter is None:
             return
@@ -94,6 +96,8 @@ class SessionData:
             ragConfig=ragConfig,
             useKG=useKG,
             kgConfig=kgConfig,
+            oncokbConfig=oncokbConfig,
+            useAutoAgent=useAutoAgent,
         )
 
         text = messages[-1]["content"]
@@ -147,8 +151,25 @@ class SessionData:
             if temp_api_key is not None:
                 chatter.set_api_key(temp_api_key, self.sessionId)
         return chatter
-
-    def _update_rags(self, useRAG: bool, ragConfig: dict, useKG: bool, kgConfig: dict):
+    
+    def _disable_agent(self, agent_mode: str):
+        if self.chatter is None:
+            return
+        _, agent = self.chatter.find_rag_agent(agent_mode)
+        if agent is None:
+            return
+        agent.use_prompt = False
+        self.chatter.set_rag_agent(agent)
+    def _update_vectorstore_agent(
+        self,
+        useRAG: bool,
+        ragConfig: Optional[Dict]=None,
+        useAutoAgent: Optional[bool]=False,
+    ):
+        if ragConfig is None:
+            # disabled
+            self._disable_agent(RagAgentModeEnum.VectorStore)            
+            return
         # update rag_agent
         try:
             (is_azure, azure_deployment, endpoint) = get_azure_embedding_deployment()
@@ -158,39 +179,81 @@ class SessionData:
                 azure_deployment=azure_deployment,
                 azure_endpoint=endpoint,
             )
-            self.chatter.set_rag_agent(
-                RagAgent(
-                    mode=RagAgentModeEnum.VectorStore,
-                    model_name=os.environ.get(OPENAI_MODEL, "gpt-3.5-turbo"),
-                    connection_args=ragConfig[ARGS_CONNECTION_ARGS],
-                    use_prompt=useRAG,
-                    embedding_func=embedding_func,
-                    documentids_workspace=doc_ids,
-                    n_results=ragConfig.get(ARGS_RESULT_NUM, 3),
-                )
+            rag_agent = RagAgent(
+                mode=RagAgentModeEnum.VectorStore,
+                model_name=os.environ.get(OPENAI_MODEL, "gpt-3.5-turbo"),
+                connection_args=ragConfig[ARGS_CONNECTION_ARGS],
+                use_prompt=useRAG or useAutoAgent,
+                embedding_func=embedding_func,
+                documentids_workspace=doc_ids,
+                n_results=ragConfig.get(ARGS_RESULT_NUM, 3),
             )
+            if "description" in ragConfig and ragConfig["description"] is not None:
+                rag_agent.agent_description = ragConfig["description"]
+            self.chatter.set_rag_agent(rag_agent)
         except Exception as e:
             logger.error(e)
-
-        # update kg
-        if not kgConfig or "connectionArgs" not in kgConfig:
+    
+    def _update_kg_agent(
+        self,
+        useKG: bool,
+        kgConfig: Optional[Dict]=None,
+        useAutoAgent: Optional[bool]=False,
+    ):
+        if kgConfig is None:
+            self._disable_agent(RagAgentModeEnum.KG)
             return
         try:
             schema_info = find_schema_info_node(kgConfig["connectionArgs"])
-            if not schema_info:
-                return
-            kg_agent = RagAgent(
-                mode=RagAgentModeEnum.KG,
-                model_name=os.environ.get(OPENAI_MODEL, "gpt-3.5-turbo"),
-                connection_args=kgConfig["connectionArgs"],
-                use_prompt=useKG,
-                schema_config_or_info_dict=schema_info,
-                conversation_factory=self._create_conversation,
-                n_results=kgConfig.get(ARGS_RESULT_NUM, 3)
-            )
-            self.chatter.set_rag_agent(kg_agent)
+            if schema_info is not None:
+                kg_agent = RagAgent(
+                    mode=RagAgentModeEnum.KG,
+                    model_name=os.environ.get(OPENAI_MODEL, "gpt-3.5-turbo"),
+                    connection_args=kgConfig["connectionArgs"],
+                    use_prompt=useKG or useAutoAgent,
+                    schema_config_or_info_dict=schema_info,
+                    conversation_factory=self._create_conversation,
+                    n_results=kgConfig.get(ARGS_RESULT_NUM, 3)
+                )
+                if "description" in kgConfig and kgConfig["description"] is not None:
+                    kg_agent.agent_description = kgConfig["description"]
+                self.chatter.set_rag_agent(kg_agent)
         except Exception as e:
             logger.error(e)
+
+    def _update_oncokb_agent(
+        self,
+        oncokbConfig: Optional[Dict]=None,
+        useAutoAgent: Optional[bool]=False,
+    ):
+        if oncokbConfig is None:
+            self._disable_agent(RagAgentModeEnum.API_ONCOKB)
+            return
+        oncokb_agent = RagAgent(
+            mode=RagAgentModeEnum.API_ONCOKB,
+            conversation_factory=self._create_conversation,
+            use_prompt=oncokbConfig["useOncoKB"] or useAutoAgent ,
+        )
+        if "description" in oncokbConfig:
+            oncokb_agent.agent_description = oncokbConfig["description"]
+        self.chatter.set_rag_agent(oncokb_agent)
+
+    def _update_rags(
+            self, 
+            useRAG: bool, 
+            useKG: bool, 
+            useAutoAgent: bool,
+            ragConfig: Optional[Dict]=None, 
+            kgConfig: Optional[Dict]=None,
+            oncokbConfig: Optional[Dict]=None,
+        ):
+        self._update_vectorstore_agent(
+            useRAG=useRAG, ragConfig=ragConfig, useAutoAgent=useAutoAgent
+        )
+        self._update_kg_agent(useKG=useKG, kgConfig=kgConfig, useAutoAgent=useAutoAgent)
+        self._update_oncokb_agent(oncokbConfig=oncokbConfig, useAutoAgent=useAutoAgent)
+        
+        self.chatter.use_ragagent_selector = useAutoAgent
 
 
 conversationsDict = {}
@@ -247,12 +310,15 @@ def chat(
     sessionId: str,
     messages: List[str],
     authKey: str,
-    ragConfig: dict,
     useRAG: bool,
-    kgConfig: dict,
     useKG: bool,
+    useAutoAgent: Optional[bool] = None,
+    ragConfig: Optional[Dict]=None,
+    kgConfig: Optional[Dict]=None,
+    oncokbConfig: Optional[dict] = None,
 ):
     rlock.acquire()
+    useAutoAgent = False if useAutoAgent is None else useAutoAgent
     try:
         conversation = get_conversation(sessionId=sessionId)
         logger.info(
@@ -267,6 +333,8 @@ def chat(
             useRAG=useRAG,
             kgConfig=kgConfig,
             useKG=useKG,
+            useAutoAgent=useAutoAgent,
+            oncokbConfig=oncokbConfig,
         )
     except Exception as e:
         logger.error(e)
