@@ -13,7 +13,7 @@ def find_schema_info_node(connection_args: dict):
         schema info if present.
         """
         db_uri = "bolt://" + connection_args.get("host") + \
-            ":" + connection_args.get("port")
+            ":" + f"{connection_args.get('port')}"
         neodriver = nu.Driver(
             db_name=connection_args.get("db_name") or "neo4j",
             db_uri=db_uri,

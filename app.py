@@ -1,6 +1,5 @@
 import json
-from typing import Optional, Any, List, Annotated
-import asyncio
+from typing import Optional, Any, List, Annotated, Dict
 
 import uvicorn
 from fastapi import FastAPI, Header, Request
@@ -54,6 +53,8 @@ root_logger = logging.getLogger()
 root_logger.addHandler(file_handler)
 root_logger.addHandler(stream_handler)
 
+logger = logging.getLogger(__name__)
+
 
 # run scheduled job: recycle unused session
 cease_event = run_scheduled_job_continuously()
@@ -100,48 +101,79 @@ def process_connection_args(rag: str, connection_args: dict) -> dict:
             connection_args["host"] = (
                 "127.0.0.1" if "HOST" not in os.environ else os.environ["HOST"]
             )
+        port = connection_args.get("port", "19530")
+        connection_args["port"] = f"{port}"
     elif rag == RAG_KG:
         if connection_args.get("host", "").lower() == "local":
             connection_args["host"] = (
                 "127.0.0.1" if "KGHOST" not in os.environ else os.environ["KGHOST"]
             )
+        port = connection_args.get("port", "7687")
+        connection_args["port"] = f"{port}"
     return connection_args
 
+def extract_and_process_params_from_json_body(
+    json: Optional[Dict], name: str, defaultVal: Optional[Any]=None,
+) -> Optional[Any]:
+    if not json:
+        return defaultVal
+    val = json.get(name, defaultVal)
+    return val
+
 @app.post("/v1/chat/completions", description="chat completions")
-def handle(
+async def handle(
     authorization: Annotated[str | None, Header()],
-    item: ChatCompletionsPostModel,
-    # request: Request, # ChatCompletionsPostModel,
+    # item: ChatCompletionsPostModel,
+    request: Request, # ChatCompletionsPostModel,
 ):
     auth = get_auth(authorization)
-    
-    sessionId = item.session_id
-    messages = [vars(msg) for msg in item.messages]
-    model = item.model
-    temperature = item.temperature
-    presence_penalty = item.presence_penalty
-    frequency_penalty = item.frequency_penalty
-    top_p = item.top_p
-    ragConfig = item.ragConfig
+    jsonBody = await request.json()
+
+    sessionId = extract_and_process_params_from_json_body(
+        jsonBody, "session_id", defaultVal=""
+    )
+    messages = extract_and_process_params_from_json_body(
+        jsonBody, "messages", defaultVal=[]
+    )
+    model = extract_and_process_params_from_json_body(
+        jsonBody, "model", defaultVal="gpt-3.5-turbo"
+    )
+    temperature = extract_and_process_params_from_json_body(
+        jsonBody, "temperature", defaultVal=0.7
+    )
+    presence_penalty = extract_and_process_params_from_json_body(
+        jsonBody, "presence_penalty", defaultVal=0
+    )
+    frequency_penalty = extract_and_process_params_from_json_body(
+        jsonBody, "frequency_penalty", defaultVal=0
+    )
+    top_p = extract_and_process_params_from_json_body(jsonBody, "top_p", defaultVal=1)
+    ragConfig = extract_and_process_params_from_json_body(
+        jsonBody, "ragConfig", defaultVal=None
+    )
     if ragConfig is not None:
-        ragConfig = vars(ragConfig)
-        ragConfig[ARGS_CONNECTION_ARGS] = vars(ragConfig[ARGS_CONNECTION_ARGS])
         ragConfig[ARGS_CONNECTION_ARGS] = process_connection_args(
             RAG_VECTORSTORE, ragConfig[ARGS_CONNECTION_ARGS]
         )
-    useRAG = item.useRAG
-    kgConfig = item.kgConfig
+    useRAG = extract_and_process_params_from_json_body(
+        jsonBody, "useRAG", defaultVal=False
+    )
+    kgConfig = extract_and_process_params_from_json_body(
+        jsonBody, "kgConfig", defaultVal=None
+    )
     if kgConfig is not None:
-        kgConfig = vars(kgConfig)
-        kgConfig[ARGS_CONNECTION_ARGS] = vars(kgConfig[ARGS_CONNECTION_ARGS])
         kgConfig[ARGS_CONNECTION_ARGS] = process_connection_args(
             RAG_KG, kgConfig[ARGS_CONNECTION_ARGS]
         )
-    useKG = item.useKG
-    oncokbConfig = item.oncokbConfig
-    if oncokbConfig is not None:
-        oncokbConfig = vars(oncokbConfig)
-    useAutoAgent = item.useAutoAgent
+    useKG = extract_and_process_params_from_json_body(
+        jsonBody, "useKG", defaultVal=False
+    )
+    oncokbConfig = extract_and_process_params_from_json_body(
+        jsonBody, "oncokbConfig", defaultVal=None
+    )
+    useAutoAgent = extract_and_process_params_from_json_body(
+        jsonBody, "useAutoAgent", defaultVal=False
+    )
 
     if not has_conversation(sessionId):
         initialize_conversation(
@@ -189,7 +221,6 @@ def handle(
             return {"error": e.message, "code": ERROR_MILVUS_UNKNOWN}
     except Exception as e:
         return {"error": str(e)}
-
 
 @app.post("/v1/rag/newdocument", description="creates new document")
 def newDocument(
