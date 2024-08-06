@@ -47,7 +47,7 @@ class Message(BaseModel):
     content: str
 
 class OncoKBConfig(BaseModel):
-    useOncoKB: bool
+    useOncoKB: Optional[bool]=False
     description: Optional[str] = None
 
 class ChatCompletionsPostModel(BaseModel):
