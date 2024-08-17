@@ -15,6 +15,7 @@ from src.constants import (
     ARGS_CONNECTION_ARGS,
     ARGS_DOCIDS_WORKSPACE,
     ARGS_RESULT_NUM,
+    ARGS_USE_REFLEXION,
     AZURE_OPENAI_ENDPOINT,
     OPENAI_API_KEY,
     OPENAI_API_TYPE,
@@ -213,7 +214,8 @@ class SessionData:
                     use_prompt=useKG or useAutoAgent,
                     schema_config_or_info_dict=schema_info,
                     conversation_factory=self._create_conversation,
-                    n_results=kgConfig.get(ARGS_RESULT_NUM, 3)
+                    n_results=kgConfig.get(ARGS_RESULT_NUM, 3),
+                    use_reflexion=kgConfig.get(ARGS_USE_REFLEXION, False),
                 )
                 if "description" in kgConfig and kgConfig["description"] is not None:
                     kg_agent.agent_description = kgConfig["description"]

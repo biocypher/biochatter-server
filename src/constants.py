@@ -22,4 +22,5 @@ ARGS_CHUNK_SIZE = "chunkSize"
 ARGS_OVERLAP_SIZE = "overlapSize"
 ARGS_SPLIT_BY_CHAR = "splitByChar"
 ARGS_DOCIDS_WORKSPACE = "docIdsWorkspace"
+ARGS_USE_REFLEXION = "useReflexion"
 

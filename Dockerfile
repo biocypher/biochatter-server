@@ -28,7 +28,7 @@ COPY . .
 EXPOSE 5001
 
 # Set the Gunicorn command to start the server
-CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "app:app", "--bind", "0.0.0.0:5001", "--timeout", "180"]
+CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "app:app", "--bind", "0.0.0.0:15001", "--timeout", "600"]
 
 # Build the Docker image:
 # docker build -t biochatter-server .
